@@ -92,6 +92,7 @@ def main() -> None:
   first_run = True
   params = Params()
   no_internal_panda_count = 0
+  external_only_logged = False
 
   while not do_exit:
     try:
@@ -131,17 +132,28 @@ def main() -> None:
 
       # Ensure internal panda is present if expected
       internal_pandas = [panda for panda in pandas if panda.is_internal()]
-      if HARDWARE.has_internal_panda() and len(internal_pandas) == 0:
+      external_pandas = [panda for panda in pandas if not panda.is_internal()]
+      internal_required = HARDWARE.has_internal_panda() and len(external_pandas) == 0
+
+      if internal_required and len(internal_pandas) == 0:
         cloudlog.error("Internal panda is missing, trying again")
         no_internal_panda_count += 1
         continue
+
+      if not internal_required and len(internal_pandas) == 0 and len(external_pandas) > 0:
+        if not external_only_logged:
+          cloudlog.info(f"No internal panda detected, continuing with external panda(s): {[p.get_usb_serial() for p in external_pandas]}")
+          external_only_logged = True
+      else:
+        external_only_logged = False
+
       no_internal_panda_count = 0
 
       # sort pandas to have deterministic order
-      # * the internal one is always first
+      # * external pandas go first
       # * then sort by hardware type
       # * as a last resort, sort by serial number
-      pandas.sort(key=lambda x: (not x.is_internal(), x.get_type(), x.get_usb_serial()))
+      pandas.sort(key=lambda x: (x.is_internal(), x.get_type(), x.get_usb_serial()))
       panda_serials = [p.get_usb_serial() for p in pandas]
 
       # log panda fw versions
